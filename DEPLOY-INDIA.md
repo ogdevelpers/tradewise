@@ -1,5 +1,7 @@
 # Run Tradewise on a free server in India (Oracle Cloud, Mumbai)
 
+> Card not accepted by Oracle? Use **DEPLOY-AWS.md** (AWS Mumbai) instead: same result, 6 months free.
+
 This is the setup for **real trading**. Zerodha only accepts API orders from a **fixed (static) IP
 address that you register with them**, and an Oracle Cloud server in Mumbai provides one, free.
 
@@ -38,7 +40,7 @@ About 30–45 minutes, mostly waiting. Commands aren't needed.
 5. **Networking:** keep the defaults, and make sure **Assign a public IPv4 address** is on.
 6. **SSH keys:** choose **Save private key** and keep the file somewhere safe. You won't need it day to day.
 7. Scroll down, click **Show advanced options → Management**, and choose **Paste cloud-init script**.
-8. Open **`deploy/oracle/cloud-init.sh`** from the Tradewise folder in a text editor and change the three lines
+8. Open **`deploy/setup-server.sh`** from the Tradewise folder in a text editor and change the three lines
    at the top:
    - `APP_PASSWORD`: the password for your website.
    - `REPO_URL`: leave as is.

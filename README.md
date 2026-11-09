@@ -31,7 +31,7 @@ from your Startup folder (Windows) or Login Items (Mac).
 ## Real trading on a free server in India
 
 Real buy and sell orders go through Zerodha's Kite Connect API, which only accepts orders from a registered
-fixed IP address. **DEPLOY-INDIA.md** sets up a free Oracle Cloud server in Mumbai with a fixed IP, HTTPS and the
+fixed IP address. **DEPLOY-AWS.md** (AWS Mumbai, 6 months free) or **DEPLOY-INDIA.md** (Oracle Cloud Mumbai, always free, but harder to sign up for with Indian cards) sets up a server with a fixed IP, HTTPS and the
 **Real trading** page. The flow:
 - you log in to Zerodha each evening (the exchange requires a daily manual login)
 - you review the plan and place it with one click

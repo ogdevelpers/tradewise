@@ -1,9 +1,11 @@
 #!/bin/bash
-# Tradewise server setup for Oracle Cloud (Always Free), Ubuntu 22.04 / 24.04, Arm or x86.
+# Tradewise server setup for any Ubuntu 22.04 / 24.04 server (Arm or x86): AWS, Oracle Cloud, others.
 #
-# Paste this whole file into: Create instance -> Show advanced options -> Management ->
-# "Paste cloud-init script". Change the three lines below first. It runs once, on first boot,
-# and takes about 10 minutes. Progress log: /var/log/tradewise-setup.log
+# Paste this whole file into the server's first-boot script box:
+#   AWS EC2:      Launch instance -> Advanced details -> "User data"
+#   Oracle Cloud: Create instance -> Show advanced options -> Management -> "Paste cloud-init script"
+# Change the three lines below first. It runs once, on first boot, and takes about 10 minutes.
+# Progress log on the server: /var/log/tradewise-setup.log
 #
 # ============================ CHANGE THESE ============================
 APP_PASSWORD="change-me-to-a-long-password"
@@ -32,10 +34,10 @@ curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --batch 
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list
 apt-get update -y && apt-get install -y caddy
 
-# --- 2. Firewall: Oracle's Ubuntu image blocks everything but SSH; open web ports ---
+# --- 2. Firewall: some images (e.g. Oracle's) block everything but SSH; open the web ports ---
 for port in 80 443; do
   iptables -C INPUT -p tcp --dport "$port" -m state --state NEW -j ACCEPT 2>/dev/null || \
-    iptables -I INPUT 5 -p tcp --dport "$port" -m state --state NEW -j ACCEPT
+    iptables -I INPUT 1 -p tcp --dport "$port" -m state --state NEW -j ACCEPT
 done
 netfilter-persistent save
 

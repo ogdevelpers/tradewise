@@ -473,7 +473,7 @@ async function livePage() {
   const st = await api("/api/live");
   if (!st.available) {
     view.innerHTML = `<div><h1>Real trading</h1><p class="lead">Buying and selling real shares through Zerodha.</p></div>
-      <div class="verdict neutral"><span class="big">Not available on this website</span><p>${esc(st.reason)} The guide <strong>DEPLOY-INDIA.md</strong> sets up a free server in Mumbai with a fixed address.</p></div>`;
+      <div class="verdict neutral"><span class="big">Not available on this website</span><p>${esc(st.reason)} The guide <strong>DEPLOY-AWS.md</strong> sets up a server in Mumbai with a fixed address.</p></div>`;
     return;
   }
   const cfg = st.config, sess = st.session, plan = st.plan;
