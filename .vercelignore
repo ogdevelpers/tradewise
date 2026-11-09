@@ -1,0 +1,8 @@
+.venv
+var
+tests
+start.sh
+start.command
+start.bat
+**/__pycache__
+.pytest_cache

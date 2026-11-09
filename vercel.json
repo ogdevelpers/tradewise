@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 300,
+      "includeFiles": "src/**"
+    }
+  },
+  "rewrites": [{ "source": "/(.*)", "destination": "/api/index" }],
+  "crons": [
+    { "path": "/api/cron/evening-1", "schedule": "30 11 * * 1-5" },
+    { "path": "/api/cron/evening-2", "schedule": "30 13 * * 1-5" },
+    { "path": "/api/cron/evening-3", "schedule": "30 15 * * 1-5" },
+    { "path": "/api/cron/morning", "schedule": "30 2 * * *" }
+  ]
+}

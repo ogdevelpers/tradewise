@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tradewise"
+version = "0.1.0"
+description = "Systematic swing-trading research, backtesting and paper trading for NSE stocks"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "pydantic>=2.5",
+    "starlette>=0.37",
+    "uvicorn>=0.27",
+    "yfinance>=0.2.54",
+    "psycopg[binary]>=3.1",
+]
+
+[project.optional-dependencies]
+yahoo = ["yfinance>=0.2.40"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+tradewise = "tradewise.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+tradewise = ["api/static/*", "data/*.csv"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+pythonpath = ["src"]

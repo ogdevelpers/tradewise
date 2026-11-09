@@ -1,0 +1,7 @@
+# Installed by Vercel. For your own computer, the start file installs from pyproject.toml instead.
+numpy>=1.26
+pandas>=2.1
+pydantic>=2.5
+starlette>=0.37
+yfinance>=0.2.54
+psycopg[binary]>=3.1

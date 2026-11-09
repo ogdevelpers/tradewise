@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tradewise</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="shell">
+    <nav class="side" aria-label="Main">
+      <div class="brand">Tradewise</div>
+      <a href="#/" data-route="today"><span class="step">1</span>Today</a>
+      <a href="#/stock" data-route="stock"><span class="step">2</span>Check a share</a>
+      <a href="#/past" data-route="past"><span class="step">3</span>Test on past data</a>
+      <a href="#/practice" data-route="practice"><span class="step">4</span>Practice with fake money</a>
+      <a href="#/live" data-route="live"><span class="step">₹</span>Real trading</a>
+      <a href="#/learn" data-route="learn"><span class="step">?</span>Learn the basics</a>
+      <p class="side-note">This app follows fixed rules. It is not investment advice and cannot promise profits. Practise for 3 months before using real money.</p>
+    </nav>
+    <main class="main">
+      <div id="status" class="status" role="status" aria-live="polite"></div>
+      <div id="view" class="stack" style="gap:24px" tabindex="-1"><p class="muted">Loading…</p></div>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>
