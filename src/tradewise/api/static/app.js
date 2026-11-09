@@ -183,7 +183,7 @@ function welcome(m = {}) {
 async function todayPage() {
   const m = await meta();
   if (!m.has_data) { view.innerHTML = `<h1>Today</h1>${demoBanner(m)}`; return; }
-  const plan = store.get("plan", "trend_pullback");
+  const plan = store.get("plan", "momentum_rotation");
   const cap = budget();
   const [mk, sig, paper] = await Promise.all([api("/api/market"), api(`/api/signals?strategy=${plan}&capital=${cap}`), api("/api/paper")]);
   const rising = mk.regime === "uptrend";
@@ -439,7 +439,7 @@ async function practicePage() {
   const accts = await api("/api/paper");
   const startForm = (first) => `
     <form id="np" class="card stack" aria-labelledby="np-h"><h2 id="np-h">${first ? "Start practising" : "Start another practice account"}</h2>
-      <div class="cards" role="radiogroup" aria-label="Plan">${planChoice("plan", store.get("plan", "trend_pullback"), "np-plan")}</div>
+      <div class="cards" role="radiogroup" aria-label="Plan">${planChoice("plan", store.get("plan", "momentum_rotation"), "np-plan")}</div>
       <label class="f" style="max-width:300px">Fake money to start with (₹)<input name="capital" type="number" min="10000" step="10000" value="${budget()}"></label>
       <button type="submit" style="align-self:flex-start">Start practising</button>
     </form>`;
