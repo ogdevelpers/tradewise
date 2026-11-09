@@ -39,6 +39,7 @@ class MomentumRotation(Strategy):
                    "hold the top 15 equally weighted, sell a holding when it drops out of the top 30.")
     Params = MomentumRotationParams
     params: MomentumRotationParams
+    rank_reason = "Momentum rank"
 
     @property
     def max_positions(self) -> int:
@@ -107,7 +108,7 @@ class MomentumRotation(Strategy):
             if r > p.top_n:
                 break
             out.entries.append(EntrySignal(symbol=sym, score=float(score[j]), weight=weight,
-                                           reason=f"Momentum rank {r}"))
+                                           reason=f"{self.rank_reason} {r}"))
             slots -= 1
         return out
 

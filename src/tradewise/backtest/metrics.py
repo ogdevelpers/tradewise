@@ -104,3 +104,35 @@ def summarize(state: SimState, risk_free: float = 0.065) -> dict:
     else:
         out["exposure"] = None
     return out
+
+
+def outcome_range(equity: pd.Series, horizon: int = TRADING_DAYS, paths: int = 2000, block: int = 21,
+                  seed: int = 7) -> dict | None:
+    """What one year could look like: a block bootstrap of the strategy's own daily returns.
+
+    Stitches random month-long chunks of past daily returns into ``paths`` imaginary years (month-long chunks
+    keep the way bad days cluster). Reports the typical year, a bad year (1 in 20), a good year (1 in 20),
+    the chance of ending a year below the start, and a 1-in-20 worst fall within a year.
+    Needs at least two years of history; returns ``None`` otherwise.
+    """
+    eq = equity.dropna()
+    rets = eq.pct_change().dropna().to_numpy(dtype="float64")
+    if len(rets) < 2 * horizon or block < 1:
+        return None
+    rng = np.random.default_rng(seed)
+    n_blocks = -(-horizon // block)
+    starts = rng.integers(0, len(rets) - block + 1, size=(paths, n_blocks))
+    idx = (starts[:, :, None] + np.arange(block)[None, None, :]).reshape(paths, -1)[:, :horizon]
+    growth = np.cumprod(1 + rets[idx], axis=1)
+    final = growth[:, -1] - 1
+    peak = np.maximum.accumulate(np.concatenate([np.ones((paths, 1)), growth], axis=1), axis=1)[:, 1:]
+    worst_dd = (growth / peak - 1).min(axis=1)
+    return {
+        "horizon_days": horizon,
+        "paths": paths,
+        "typical_year": _num(np.median(final)),
+        "bad_year": _num(np.percentile(final, 5)),
+        "good_year": _num(np.percentile(final, 95)),
+        "chance_of_loss": _num((final < 0).mean()),
+        "bad_fall": _num(np.percentile(worst_dd, 5)),
+    }

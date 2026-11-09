@@ -5,10 +5,11 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from .base import Decision, DayContext, EntrySignal, ExitSignal, Features, PositionView, Strategy, StrategyParams
+from .low_volatility import LowVolatility
 from .momentum_rotation import MomentumRotation
 from .trend_pullback import TrendPullback
 
-_REGISTRY: dict[str, type[Strategy]] = {cls.name: cls for cls in (TrendPullback, MomentumRotation)}
+_REGISTRY: dict[str, type[Strategy]] = {cls.name: cls for cls in (TrendPullback, MomentumRotation, LowVolatility)}
 
 
 def available() -> list[dict]:
@@ -25,5 +26,5 @@ def create(name: str, params: Mapping[str, Any] | None = None) -> Strategy:
 
 __all__ = [
     "Decision", "DayContext", "EntrySignal", "ExitSignal", "Features", "PositionView", "Strategy",
-    "StrategyParams", "TrendPullback", "MomentumRotation", "available", "create",
+    "StrategyParams", "TrendPullback", "MomentumRotation", "LowVolatility", "available", "create",
 ]

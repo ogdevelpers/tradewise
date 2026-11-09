@@ -60,7 +60,7 @@ pip install -e ".[yahoo,dev]"
 tradewise start            # background app + start at login + opens browser (--foreground, --demo)
 tradewise status           # is it running, how fresh are the prices
 tradewise stop
-pytest                     # 97 tests, about 20 seconds (set TRADEWISE_TEST_PG_URL to also test Postgres)
+pytest                     # 105 tests, about 20 seconds (set TRADEWISE_TEST_PG_URL to also test Postgres)
 ```
 
 Other commands: `tradewise data`, `tradewise backtest`, `tradewise signals`, `tradewise paper ...`, `tradewise serve`.
@@ -102,7 +102,27 @@ whole position exits on a close below the 50 DMA.
 - Sells a holding only when it falls out of the top 30.
 - Makes no new buys while Nifty is below its 200 DMA.
 
+**Steady shares** (`low_volatility`) also runs on the first trading day of each month:
+- Among liquid stocks above their 200 DMA, ranks by *lowest* one-year volatility, with a tilt to positive
+  one-year returns (the low-volatility anomaly; NSE's Nifty100 Low Volatility 30 index uses the same idea).
+- Holds the top 15 at equal weight, sells a holding when it falls out of the top 30, no new buys while Nifty is
+  below its 200 DMA.
+
 Every parameter can be changed. `GET /api/strategies` lists them with their limits.
+
+### Safety switch (`tradewise/risk.py`, on by default)
+
+Shrinks the size of *new* buys; it never forces a sale.
+- **Market calm:** size × min(1, 16% ÷ Nifty's 20-day annualised volatility), never below 25%.
+- **Drawdown brake:** half-size buys while the account is more than 12% below its peak.
+
+Applies to backtests, practice accounts, the Today page and real-trading plans. Set `safety_switch=false`
+in the backtest config, or tick "Also show each plan without it", to compare.
+
+### Range of outcomes
+
+Every backtest result includes `outcomes`: a block bootstrap (21-day blocks, 2,000 paths) of the plan's daily
+returns giving a typical year, a 1-in-20 bad and good year, the chance of a losing year and a 1-in-20 worst fall.
 
 ## How the backtest stays honest
 

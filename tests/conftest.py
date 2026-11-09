@@ -20,7 +20,7 @@ def synth() -> MarketData:
 
 
 def make_market(prices: dict[str, list[tuple[float, float, float, float]]], start="2024-01-01",
-                sectors: dict[str, str] | None = None) -> MarketData:
+                sectors: dict[str, str] | None = None, bench: list[float] | None = None) -> MarketData:
     """Build MarketData from per-symbol lists of (open, high, low, close); None = no bar that day."""
     n = max(len(v) for v in prices.values())
     idx = pd.bdate_range(start, periods=n)
@@ -28,8 +28,8 @@ def make_market(prices: dict[str, list[tuple[float, float, float, float]]], star
     for sym, rows in prices.items():
         recs = [(d, *r, 1e6) for d, r in zip(idx, rows) if r is not None]
         bars[sym] = pd.DataFrame(recs, columns=["date", "open", "high", "low", "close", "volume"]).set_index("date")
-    bench = pd.Series(100.0, index=idx)
-    return MarketData.from_bars(bars, bench, sectors or {})
+    b = pd.Series(100.0, index=idx) if bench is None else pd.Series(bench, index=idx, dtype="float64")
+    return MarketData.from_bars(bars, b, sectors or {})
 
 
 class ScriptedParams(StrategyParams):

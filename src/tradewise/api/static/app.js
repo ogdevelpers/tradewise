@@ -11,14 +11,24 @@ const PLAN = {
     name: "Hold the strongest", tag: "Long holds · check once a month",
     desc: "Owns the 15 shares that rose most steadily over the past year. Once a month it swaps out any that have weakened.",
   },
-  combined: { name: "Mix of both", desc: "Part of the money in each plan." },
+  low_volatility: {
+    name: "Steady shares", tag: "Calm, long holds · check once a month",
+    desc: "Owns the 15 calmest large shares that are still rising. Calm shares have usually fallen less when the market drops. Once a month it swaps out any that changed.",
+  },
+  combined: { name: "Mix of plans", desc: "Part of the money in each plan." },
   benchmark: { name: "Just buy Nifty 50 and hold", desc: "Doing nothing clever: buy the index once and keep it." },
 };
-const COLORS = { trend_pullback: "#1F4FD1", momentum_rotation: "#B4430A", combined: "#0B7A5C", benchmark: "#9A9CA3" };
+const COLORS = { trend_pullback: "#1F4FD1", momentum_rotation: "#B4430A", low_volatility: "#7A3EB1", combined: "#0B7A5C", benchmark: "#9A9CA3" };
+const PLAN_KEYS = ["low_volatility", "momentum_rotation", "trend_pullback"];
+const MIX = { low_volatility: 0.4, momentum_rotation: 0.4, trend_pullback: 0.2 };  // default share of money in the mix
+const baseKey = (k) => String(k).replace(/:no_safety$/, "");
+const planName = (k) => (PLAN[baseKey(k)]?.name || k) + (String(k).endsWith(":no_safety") ? " (safety switch off)" : "");
 
 function plainReason(r = "") {
   const m = r.match(/Momentum rank (\d+)/);
   if (m) return `one of the strongest shares (#${m[1]})`;
+  const st = r.match(/Steadiness rank (\d+)/);
+  if (st) return `one of the calmest rising shares (#${st[1]})`;
   if (/^Stop-loss hit/.test(r)) return "safety exit (stop-loss) reached";
   if (/^Gap below/.test(r)) return "price opened below the safety exit";
   if (/^Profit target/.test(r)) return "profit step reached, sold half";
@@ -154,7 +164,7 @@ const legend = (items) => `<div class="legend">${items.map((i) => `<span><i styl
 const checklist = (list) => `<ul class="rules">${list.map((r) => `<li><span class="ic ${r.pass ? "ok" : "no"}" aria-hidden="true">${r.pass ? "✓" : "✗"}</span><span><span class="sr">${r.pass ? "Yes" : "Not yet"}: </span>${esc(r.plain || r.rule)}${r.why ? `<span class="why">${esc(r.why)}</span>` : ""}</span></li>`).join("")}</ul>`;
 
 function planChoice(name, selected, inputName = "plan") {
-  return Object.entries(PLAN).filter(([k]) => k === "trend_pullback" || k === "momentum_rotation").map(([k, p]) => `
+  return PLAN_KEYS.map((k) => [k, PLAN[k]]).map(([k, p]) => `
     <label class="choice"><input type="radio" name="${inputName}" value="${k}" ${k === selected ? "checked" : ""}>
       <span><strong>${esc(p.name)}</strong><span class="d">${esc(p.tag)}</span><br><span class="d">${esc(p.desc)}</span></span></label>`).join("");
 }
@@ -204,10 +214,12 @@ async function todayPage() {
       ${!sig.market_rising ? `<div class="banner">The overall market is falling, so this plan would not buy anything new right now. It only sells weak shares.</div>` : ""}
       <div class="scroll"><table><thead><tr><th>#</th><th>Share</th><th class="num">Price</th><th class="num">Shares to buy</th><th class="num">Amount</th></tr></thead><tbody>
       ${rows.map((r) => `<tr><td>${r.rank}</td><td><a href="#/stock/${encodeURIComponent(r.symbol)}"><strong>${esc(r.symbol)}</strong></a><div class="small muted">${esc(r.sector)}</div></td><td class="num">${price(r.close)}</td><td class="num">${r.qty >= 1 ? r.qty : "skip: price too high"}</td><td class="num">${r.qty >= 1 ? inr(r.value) : "—"}</td></tr>`).join("") || '<tr><td colspan="5" class="muted">No share qualifies right now.</td></tr>'}
-      </tbody></table></div><p class="small muted" style="margin:0">Each share gets about 1/15 of ${inr(cap)} (${inr(cap / 15)}). Shares costing more than that are skipped. There is no fixed safety exit: a share is sold when it drops out of the 30 strongest at a monthly check.</p>`;
+      </tbody></table></div><p class="small muted" style="margin:0">Each share gets about 1/15 of ${inr(cap)} (${inr(cap / 15 * (sig.safety?.scale ?? 1))}${(sig.safety?.scale ?? 1) < 1 ? ", after the safety switch" : ""}). Shares costing more than that are skipped. There is no fixed safety exit: a share is sold when it drops out of the 30 strongest at a monthly check.</p>`;
   }
 
   const acct = paper[0];
+  const safe = sig.safety;
+  const safetyBox = safe ? `<div class="banner" style="${safe.scale < 1 ? "" : "background:#E9EAE4;color:#2E3139"}"><strong>Safety switch ${help("safety-switch")}:</strong> ${esc(safe.message)}${safe.scale < 1 ? " The amounts below already include this." : ""}</div>` : "";
   view.innerHTML = `
     <div><h1>Today</h1><p class="lead">Prices up to the market close on <strong>${esc(day(mk.date))}</strong>. Ideas below are for the next trading day. Tradewise updates prices by itself ${m.serverless ? "every weekday evening" : "after 4 pm on weekdays"}.</p></div>
     ${welcome(m)}
@@ -222,7 +234,7 @@ async function todayPage() {
         <p class="small muted" style="margin:0 0 10px">Only use money you won't need for the next 3–5 years.</p></div>
       <div class="cards" role="radiogroup" aria-label="Plan">${planChoice("plan", plan)}</div>
     </section>
-    <section class="card" aria-labelledby="ideas-h"><h2 id="ideas-h">${esc(P.name)}: what to do next</h2>${ideas}
+    <section class="card" aria-labelledby="ideas-h"><h2 id="ideas-h">${esc(P.name)}: what to do next</h2>${safetyBox}${ideas}
       ${plan === "trend_pullback" && sig.watch.length ? `<details><summary>Almost ready (${sig.watch.length} shares close to a buy)</summary><div class="in">${sig.watch.slice(0, 8).map((w) => `<div><a href="#/stock/${encodeURIComponent(w.symbol)}"><strong>${esc(w.symbol)}</strong></a> · ${w.passed} of ${w.total} checks passed. <span class="muted">Still waiting for: ${esc((w.missing_plain || w.missing).join("; ").toLowerCase())}.</span></div>`).join("")}</div></details>` : ""}
     </section>
     <section class="card" aria-labelledby="pr-h"><h2 id="pr-h">Your practice account</h2>
@@ -278,7 +290,7 @@ async function stockPage(symbol) {
         <h2 id="sg-h">${s.action === "BUY" ? "Passes all checks: idea to buy" : "Not a buy today"}</h2>
         <p style="margin:0;color:#D4D5CF">${passed} of ${total} checks passed${s.action === "BUY" ? "." : ". All must pass before the app suggests buying."}</p>
         ${s.action === "BUY" ? (() => {
-          const qty = Math.min(Math.floor((cap * 0.01) / (s.entry - s.stop)), Math.floor((cap * 0.2) / s.entry));
+          const qty = Math.min(Math.floor((cap * 0.01 * (s.size_scale ?? 1)) / (s.entry - s.stop)), Math.floor((cap * 0.2) / s.entry));
           return `<p style="margin:0">With ${inr(cap)}: buy about <strong>${qty >= 1 ? qty : 0} shares</strong> near ${price(s.entry)}. Safety exit at <strong>${price(s.stop)}</strong>, profit step at <strong>${price(s.target)}</strong>.</p>`;
         })() : ""}
         ${checklist(a.checklist)}
@@ -321,15 +333,19 @@ async function pastPage() {
         <label class="f">In the year<select name="year">${years.map((y) => `<option ${y === startYear ? "selected" : ""}>${y}</option>`).join("")}</select></label>
       </div>
       <fieldset><legend>Plans to compare</legend>
-        <label class="check"><input type="checkbox" name="s" value="trend_pullback" checked> <strong>Buy the dip</strong> <span class="small muted">short trades with a safety exit</span></label>
+        <label class="check"><input type="checkbox" name="s" value="low_volatility" checked> <strong>Steady shares</strong> <span class="small muted">calm shares, monthly changes</span></label>
         <label class="check"><input type="checkbox" name="s" value="momentum_rotation" checked> <strong>Hold the strongest</strong> <span class="small muted">monthly changes</span></label>
-        <label class="check"><input type="checkbox" name="combined" checked> <strong>Mix of both</strong> <span class="small muted">70% Hold the strongest, 30% Buy the dip</span></label>
+        <label class="check"><input type="checkbox" name="s" value="trend_pullback" checked> <strong>Buy the dip</strong> <span class="small muted">short trades with a safety exit</span></label>
+        <label class="check"><input type="checkbox" name="combined" checked> <strong>Mix of plans</strong> <span class="small muted">money split 40% Steady, 40% Strongest, 20% Dip (between the plans you tick)</span></label>
         <p class="small muted" style="margin:0">"Just buy Nifty 50 and hold" is always shown for comparison.</p>
+      </fieldset>
+      <fieldset><legend>Protection</legend>
+        <label class="check"><input type="checkbox" name="safety" checked> <strong>Safety switch</strong> ${help("safety-switch")} <span class="small muted">buy smaller when the market is jumpy or the account is down</span></label>
+        <label class="check"><input type="checkbox" name="nosafety"> <strong>Also show each plan without it</strong> <span class="small muted">to see what the switch changes</span></label>
       </fieldset>
       <details><summary>Advanced settings (optional)</summary><div class="in"><div class="grid2">
         <label class="f">Money at risk per trade (%) ${help("risk")}<input name="risk" type="number" min="0.1" max="5" step="0.1" value="1"></label>
         <label class="f">Price slippage (%)<input name="slip" type="number" min="0" max="2" step="0.05" value="0.1"></label>
-        <label class="f">Share for "Hold the strongest" in the mix (%)<input name="mix" type="number" min="0" max="100" step="5" value="70"></label>
         <label class="f">Compare results before and after<input name="split" type="date" value="2022-01-01"></label>
       </div></div></details>
       <button type="submit" id="run" style="align-self:flex-start">Show me what would have happened</button>
@@ -343,12 +359,13 @@ async function pastPage() {
     if (!chosen.length) { toast("Pick at least one plan"); return; }
     const capital = Number(fd.get("capital"));
     if (!(capital >= 10000)) { toast("Please enter at least ₹10,000"); return; }
-    const mix = Math.min(100, Math.max(0, Number(fd.get("mix")) || 70)) / 100;
+    const safety = fd.get("safety") === "on";
     const body = {
-      strategies: chosen.map((n) => ({ name: n, weight: n === "momentum_rotation" ? mix : 1 - mix })),
+      strategies: chosen.map((n) => ({ name: n, weight: MIX[n] })),
       combined: fd.get("combined") === "on" && chosen.length > 1,
+      without_safety: safety && fd.get("nosafety") === "on",
       split: fd.get("split") || null,
-      config: { start: `${fd.get("year")}-01-01`, initial_capital: capital, risk_per_trade: Number(fd.get("risk")) / 100, slippage: Number(fd.get("slip")) / 100 },
+      config: { start: `${fd.get("year")}-01-01`, initial_capital: capital, risk_per_trade: Number(fd.get("risk")) / 100, slippage: Number(fd.get("slip")) / 100, safety_switch: safety },
     };
     const btn = view.querySelector("#run"); btn.disabled = true; btn.textContent = "Replaying the past… (a few seconds)";
     const out = view.querySelector("#results");
@@ -361,7 +378,7 @@ async function pastPage() {
 }
 
 function showPast(out, { res, capital }) {
-  const rs = res.results.map((r) => ({ ...r, final: r.equity.length ? r.equity[r.equity.length - 1][1] : null, plain: PLAN[r.key]?.name || r.label }));
+  const rs = res.results.map((r) => ({ ...r, final: r.equity.length ? r.equity[r.equity.length - 1][1] : null, plain: r.key === "combined" ? `Mix of plans (${r.label.replace("Combined ", "")})` : PLAN[baseKey(r.key)] ? planName(r.key) : r.label }));
   const startDate = rs[0]?.metrics.start;
   const best = rs.reduce((a, b) => (b.final > a.final ? b : a), rs[0]);
   const calm = rs.reduce((a, b) => ((b.metrics.max_drawdown ?? -1) > (a.metrics.max_drawdown ?? -1) ? b : a), rs[0]);
@@ -372,14 +389,21 @@ function showPast(out, { res, capital }) {
       dd != null ? `Worst fall from a high point: <strong>${pct(dd, 0)}</strong> ${help("drawdown")}. Like ₹1,00,000 shrinking to ${inr(100000 * (1 + dd))} before recovering.` : "",
       mt.trades ? `Made ${num(mt.trades, 0)} trades${mt.trades_per_year ? ` (about ${num(mt.trades_per_year, 0)} a year)` : ""}${mt.win_rate != null ? `, and ${num(mt.win_rate * 100, 0)} of every 100 made money ${help("win-rate")}` : ""}` : "",
       mt.total_costs ? `Paid ${inr(mt.total_costs)} in charges and taxes` : "",
+      mt.exposure != null ? `On average ${pct(mt.exposure, 0)} of the money was in shares; the rest waited as cash` : "",
     ].filter(Boolean);
-    return `<article class="result" style="border-top:4px solid ${COLORS[r.key] || "#666"}">
+    const o = r.outcomes;
+    const range = o ? `<div class="small" style="border-top:1px solid #E4E4DE;padding-top:8px">
+      <strong>One year could look like</strong> ${help("outcomes")}<br>
+      Typical year: <span class="${cls(o.typical_year)}">${spct(o.typical_year, 0)}</span> · Bad year (1 in 20): <span class="${cls(o.bad_year)}">${spct(o.bad_year, 0)}</span> · Good year (1 in 20): <span class="${cls(o.good_year)}">${spct(o.good_year, 0)}</span><br>
+      Chance of ending a year with less money: <strong>${pct(o.chance_of_loss, 0)}</strong></div>` : "";
+    return `<article class="result" style="border-top:4px ${r.key.endsWith(":no_safety") ? "dashed" : "solid"} ${COLORS[baseKey(r.key)] || "#666"}">
       <div class="head"><strong style="font-size:16px">${esc(r.plain)}</strong><span>${r === best ? '<span class="badge buy">Most money</span> ' : ""}${r === calm ? '<span class="badge">Smoothest ride</span>' : ""}</span></div>
       <div class="money ${cls(r.final - capital)}">${inr(r.final)}</div>
       <span class="small muted">from ${inr(capital)} on ${esc(day(startDate))}</span>
-      <ul>${lines.map((l) => `<li>${l}</li>`).join("")}</ul></article>`;
+      <ul>${lines.map((l) => `<li>${l}</li>`).join("")}</ul>${range}</article>`;
   };
-  const plans = rs.filter((r) => r.key === "trend_pullback" || r.key === "momentum_rotation");
+  const plans = rs.filter((r) => PLAN_KEYS.includes(r.key));
+  const idle = rs.filter((r) => r.metrics.exposure != null && r.metrics.exposure < 0.6 && PLAN_KEYS.includes(r.key));
   const ready = (r) => {
     const mt = r.metrics, sp = r.split;
     return [
@@ -391,7 +415,8 @@ function showPast(out, { res, capital }) {
   };
   out.innerHTML = `
     <section class="card" aria-labelledby="r-h"><h2 id="r-h">What would have happened</h2><div class="cards">${rs.map(card).join("")}</div></section>
-    <section class="card" aria-labelledby="g-h"><h2 id="g-h">How the money grew</h2><div id="eq"></div>${legend(rs.map((r) => ({ name: r.plain, color: COLORS[r.key] || "#666" })))}
+    ${idle.length ? `<div class="banner"><strong>Much of the money sat idle.</strong> ${esc(idle.map((r) => r.plain).join(", "))} kept less than 60% of the money in shares on average, often because ${inr(capital)} is too little to buy whole shares of expensive companies once it is split ${res.results.some((r) => r.key === "combined") ? "between plans and " : ""}across up to 15 shares. A larger amount, or one plan instead of a mix, keeps more of it working.</div>` : ""}
+    <section class="card" aria-labelledby="g-h"><h2 id="g-h">How the money grew</h2><div id="eq"></div>${legend(rs.map((r) => ({ name: r.plain, color: COLORS[baseKey(r.key)] || "#666" })))}
       <p class="small muted" style="margin:0">Hover over the chart to see values on any date. Falls along the way are normal for every plan.</p></section>
     ${plans.map((r) => { const checks = ready(r); const ok = checks.slice(0, 3).every((c) => c.pass); return `
       <section class="card dark"><h2>Is "${esc(r.plain)}" ready for real money?</h2>
@@ -399,12 +424,12 @@ function showPast(out, { res, capital }) {
         ${checklist(checks)}</section>`; }).join("")}
     <p class="small muted" style="margin:0">Past results never guarantee future results. The real future can be better or worse.</p>
     <details><summary>All the numbers</summary><div class="in scroll"><table>
-      <thead><tr><th>Plan</th><th class="num">Final value</th><th class="num">Yearly growth</th><th class="num">Worst fall</th><th class="num">Sharpe</th><th class="num">Wins</th><th class="num">Trades/yr</th><th class="num">Charges</th><th class="num">Growth after split</th></tr></thead>
-      <tbody>${rs.map((r) => { const mt = r.metrics; return `<tr><td>${esc(r.plain)}</td><td class="num">${inr(r.final)}</td><td class="num">${pct(mt.cagr)}</td><td class="num">${pct(mt.max_drawdown)}</td><td class="num">${num(mt.sharpe)}</td><td class="num">${pct(mt.win_rate, 0)}</td><td class="num">${num(mt.trades_per_year, 0)}</td><td class="num">${mt.total_costs != null ? inr(mt.total_costs) : "—"}</td><td class="num">${pct(r.split?.test?.cagr)}</td></tr>`; }).join("")}</tbody></table></div></details>
+      <thead><tr><th>Plan</th><th class="num">Final value</th><th class="num">Yearly growth</th><th class="num">Worst fall</th><th class="num">Sharpe</th><th class="num">Wins</th><th class="num">Trades/yr</th><th class="num">Charges</th><th class="num">Invested</th><th class="num">Bad year</th><th class="num">Growth after split</th></tr></thead>
+      <tbody>${rs.map((r) => { const mt = r.metrics; return `<tr><td>${esc(r.plain)}</td><td class="num">${inr(r.final)}</td><td class="num">${pct(mt.cagr)}</td><td class="num">${pct(mt.max_drawdown)}</td><td class="num">${num(mt.sharpe)}</td><td class="num">${pct(mt.win_rate, 0)}</td><td class="num">${num(mt.trades_per_year, 0)}</td><td class="num">${mt.total_costs != null ? inr(mt.total_costs) : "—"}</td><td class="num">${pct(mt.exposure, 0)}</td><td class="num">${spct(r.outcomes?.bad_year, 0)}</td><td class="num">${pct(r.split?.test?.cagr)}</td></tr>`; }).join("")}</tbody></table></div></details>
     ${plans.map((r) => `<details><summary>Every trade: ${esc(r.plain)} (latest ${Math.min(50, r.trades.length)})</summary><div class="in scroll"><table>
       <thead><tr><th>Share</th><th>Bought</th><th>Sold</th><th class="num">Shares</th><th class="num">Buy price</th><th class="num">Sell price</th><th class="num">Profit / loss</th><th>Why it was sold</th></tr></thead>
       <tbody>${r.trades.slice(-50).reverse().map((t) => `<tr><td>${esc(t.symbol)}</td><td>${esc(t.entry_date)}</td><td>${esc(t.exit_date)}</td><td class="num">${t.qty}</td><td class="num">${price(t.entry_price)}</td><td class="num">${price(t.exit_price)}</td><td class="num ${cls(t.pnl)}">${inr(t.pnl)}</td><td class="small">${esc(plainReason(t.exit_reason))}</td></tr>`).join("") || '<tr><td colspan="8" class="muted">No finished trades.</td></tr>'}</tbody></table></div></details>`).join("")}`;
-  lineChart(out.querySelector("#eq"), rs.map((r) => ({ name: r.plain, color: COLORS[r.key] || "#666", dash: r.key === "benchmark", points: r.equity })), { fmt: (v) => (v >= 1e5 ? "₹" + (v / 1e5).toFixed(1) + "L" : inr(v)) });
+  lineChart(out.querySelector("#eq"), rs.map((r) => ({ name: r.plain, color: COLORS[baseKey(r.key)] || "#666", dash: r.key === "benchmark" || r.key.endsWith(":no_safety"), points: r.equity })), { fmt: (v) => (v >= 1e5 ? "₹" + (v / 1e5).toFixed(1) + "L" : inr(v)) });
 }
 
 // ------------------------------------------------------------------ PRACTICE
@@ -477,7 +502,6 @@ async function livePage() {
     return;
   }
   const cfg = st.config, sess = st.session, plan = st.plan;
-  const planName = (k) => PLAN[k]?.name || k;
   const sentence = (o) => o.side === "BUY"
     ? `Buy <strong>${o.qty} ${esc(o.symbol)}</strong> at the next open, paying at most ${price(o.price)} per share (about ${inr(o.value)}). Safety exit at ${price(o.stop)}.`
     : `Sell <strong>${o.qty} ${esc(o.symbol)}</strong> at the next open, at the market price. Reason: ${esc(plainReason(o.reason))}.`;
@@ -506,7 +530,7 @@ async function livePage() {
 
     <section class="card" aria-labelledby="l2"><h2 id="l2">2 · Your limits</h2>
       <div class="verdict ${cfg.enabled ? "good" : "neutral"}"><span class="big">Real trading is ${cfg.enabled ? "ON" : "OFF"}</span>
-        <p>${cfg.enabled ? `Plan: ${esc(planName(cfg.strategy))}. At most ${inr(cfg.capital_limit)} invested, at most ${cfg.max_new_per_day} new buy(s) a day, about ${pct(cfg.risk_per_trade)} of the limit at risk per trade.` : "No buy orders will be planned or placed. Safety exits for shares you already own stay active at Zerodha."}</p></div>
+        <p>${cfg.enabled ? `Plan: ${esc(planName(cfg.strategy))}. At most ${inr(cfg.capital_limit)} invested, at most ${cfg.max_new_per_day} new buy(s) a day, about ${pct(cfg.risk_per_trade)} of the limit at risk per trade. Safety switch ${cfg.safety_switch === false ? "off" : "on"}: buys shrink when the market is jumpy.` : "No buy orders will be planned or placed. Safety exits for shares you already own stay active at Zerodha."}</p></div>
       <form id="limits" class="stack">
         <div class="grid2">
           <label class="f">Most money Tradewise may use (₹)<input name="capital_limit" type="number" min="10000" step="5000" value="${cfg.capital_limit || 25000}"></label>
@@ -588,6 +612,10 @@ const TERMS = [
   ["target", "Profit step (target)", "A price where you sell half to lock in some profit. The other half stays in case the rise continues. In this app it's set so the profit is twice the amount you risked."],
   ["risk", "The 1% rule (risk per trade)", "Each trade is sized so that if the safety exit is hit, you lose only about 1% of your money (₹1,000 out of ₹1,00,000). Even 10 losses in a row would cost only about 10%. This is the most important rule for staying in the game."],
   ["position-size", "How many shares to buy", "Worked out for you: (1% of your money) ÷ (buy price − safety exit). A share with a far-away safety exit gets fewer shares. No single share gets more than 20% of your money."],
+  ["volatility", "Volatility (how much a price swings)", "How much a price moves up and down from day to day, written as a yearly percentage. The Nifty 50 normally swings about 15–18% a year; in a crash it can swing 40% or more. Shares that swing less are calmer to hold."],
+  ["low-vol", "Steady (low-volatility) shares", "Shares whose prices move less than most. Research across many countries, India included, found they have often earned about as much as the market while falling less in bad years. NSE even runs an index on this idea (Nifty100 Low Volatility 30). \"Steady shares\" uses it."],
+  ["safety-switch", "Safety switch", "Two automatic brakes on how much the app buys. 1) When the market is swinging much more than usual, new buys get smaller: at twice the normal swing, half size. Big swings usually come in crashes, so this cuts risk when it matters most. 2) While your account is more than 12% below its best value, new buys are half size, so a bad patch can't snowball. It never forces a sale; it only shrinks new buys. You can switch it off when testing on past data to see the difference."],
+  ["outcomes", "One year could look like…", "The app cuts the plan's past daily results into month-long pieces and shuffles them into 2,000 imaginary years. The \"bad year\" is the 1-in-20 worst of those. It is a rough guide to what one unlucky year could feel like, not a forecast."],
   ["momentum", "Momentum", "Shares that have risen steadily for 6–12 months tend to keep doing well for a while. \"Hold the strongest\" uses this: it owns the strongest 15 and swaps them once a month."],
   ["backtest", "Backtest (test on past data)", "Replaying the rules on old prices, day by day, as if you had followed them back then. It shows how a plan behaved in good and bad years. It can't promise the future, but a plan that failed in the past is unlikely to work now."],
   ["cagr", "Yearly growth (CAGR)", "The steady yearly rate that would turn your starting money into the final amount. For example, 12% a year turns ₹1 lakh into about ₹3.1 lakh in 10 years."],
@@ -608,8 +636,8 @@ async function learnPage(term) {
         <li>If a share passes every rule, it suggests buying, with exactly how many shares, a safety exit and a profit step.</li>
         <li>You can see how those rules did in past years (<a href="#/past">Test on past data</a>) and try them with fake money (<a href="#/practice">Practice</a>).</li>
       </ol></section>
-    <section class="card" aria-labelledby="plans-h"><h2 id="plans-h">The two plans</h2><div class="cards">
-      ${["trend_pullback", "momentum_rotation"].map((k) => `<div class="result"><strong style="font-size:16px">${esc(PLAN[k].name)}</strong><span class="small muted">${esc(PLAN[k].tag)}</span><p style="margin:0">${esc(PLAN[k].desc)}</p></div>`).join("")}
+    <section class="card" aria-labelledby="plans-h"><h2 id="plans-h">The three plans</h2><div class="cards">
+      ${PLAN_KEYS.map((k) => `<div class="result"><strong style="font-size:16px">${esc(PLAN[k].name)}</strong><span class="small muted">${esc(PLAN[k].tag)}</span><p style="margin:0">${esc(PLAN[k].desc)}</p></div>`).join("")}
     </div></section>
     <section class="card" aria-labelledby="gold-h"><h2 id="gold-h">Golden rules for beginners</h2>
       <ul style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px;font-size:15px">

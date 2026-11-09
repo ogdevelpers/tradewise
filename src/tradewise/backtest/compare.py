@@ -13,7 +13,7 @@ import pandas as pd
 from .. import strategies
 from ..data.market import MarketData
 from .engine import BacktestConfig, SimState, Simulator
-from .metrics import curve_stats, equity_series, summarize
+from .metrics import curve_stats, equity_series, outcome_range, summarize
 
 log = logging.getLogger(__name__)
 
@@ -60,8 +60,13 @@ def compare(
     split: str | pd.Timestamp | None = None,
     combined: bool = True,
     workers: int = 1,
+    without_safety: bool = False,
 ) -> dict:
-    """Backtest each spec on full capital, plus a combined portfolio that splits capital by ``weight``."""
+    """Backtest each spec on full capital, plus a combined portfolio that splits capital by ``weight``.
+
+    ``without_safety`` also runs every spec with the safety switch off (keys ``<name>:no_safety``), so the
+    effect of the switch can be seen side by side.
+    """
     if not specs:
         raise ValueError("pick at least one strategy")
     cfg = config or BacktestConfig()
@@ -75,6 +80,18 @@ def compare(
     else:
         states = [_run_one(data, s, cfg) for s in specs]
 
+    extra = []
+    if without_safety and cfg.safety_switch:
+        off = cfg.model_copy(update={"safety_switch": False})
+        for spec in specs:
+            st = _run_one(data, spec, off)
+            eq = equity_series(st)
+            extra.append({
+                "key": f"{spec.name}:no_safety",
+                "label": strategies.create(spec.name, spec.params).label + " (safety switch off)",
+                "metrics": summarize(st), "split": _split_stats(eq, split_ts), "outcomes": outcome_range(eq),
+                "equity": downsample(eq), "trades": [],
+            })
     results = []
     curves: dict[str, pd.Series] = {}
     for spec, st in zip(specs, states):
@@ -85,6 +102,7 @@ def compare(
             "label": strategies.create(spec.name, spec.params).label,
             "metrics": summarize(st),
             "split": _split_stats(eq, split_ts),
+            "outcomes": outcome_range(eq),
             "equity": downsample(eq),
             "trades": [t.__dict__ for t in st.trades[-500:]],
         })
@@ -102,9 +120,10 @@ def compare(
         results.append({
             "key": "combined", "label": label, "metrics": {**curve_stats(comb), "trades": sum(len(st.trades) for st in sleeves),
                                                            "total_costs": round(sum(st.total_costs for st in sleeves), 2)},
-            "split": _split_stats(comb, split_ts), "equity": downsample(comb), "trades": [],
+            "split": _split_stats(comb, split_ts), "outcomes": outcome_range(comb), "equity": downsample(comb), "trades": [],
         })
 
+    results += extra
     ref = next((c for c in curves.values() if not c.empty), None)
     bench = data.benchmark
     if ref is not None:
@@ -113,7 +132,8 @@ def compare(
             beq = b / b.iloc[0] * cfg.initial_capital
             results.append({
                 "key": "benchmark", "label": "Benchmark buy & hold", "metrics": curve_stats(beq),
-                "split": _split_stats(beq, split_ts), "equity": downsample(beq), "trades": [],
+                "split": _split_stats(beq, split_ts), "outcomes": outcome_range(beq), "equity": downsample(beq),
+                "trades": [],
             })
     return {"config": cfg.model_dump(mode="json"), "split": split_ts.strftime("%Y-%m-%d") if split_ts else None,
             "results": results}

@@ -43,6 +43,7 @@ class BacktestRequest(BaseModel):
     config: dict[str, Any] = Field(default_factory=dict)
     split: str | None = None
     combined: bool = True
+    without_safety: bool = False
 
 
 class PaperCreate(BaseModel):
@@ -149,7 +150,8 @@ def create_app(settings: Settings | None = None, updater: Updater | None = None,
         cfg = BacktestConfig(**req.config)
         specs = [StrategySpec(s.name, s.params, s.weight) for s in req.strategies]
         data = await run_in_threadpool(market.data)
-        return await submit("backtest", lambda: compare(data, specs, cfg, split=req.split, combined=req.combined))
+        return await submit("backtest", lambda: compare(data, specs, cfg, split=req.split, combined=req.combined,
+                                                              without_safety=req.without_safety))
 
     async def status(_: Request):
         st = await run_in_threadpool(updater.status)

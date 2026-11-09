@@ -121,7 +121,7 @@ def test_accounting_identity_on_full_backtest(synth):
     assert all(c >= -1e-6 for _, _, c in st.equity)
 
 
-@pytest.mark.parametrize("name", ["trend_pullback", "momentum_rotation"])
+@pytest.mark.parametrize("name", ["trend_pullback", "momentum_rotation", "low_volatility"])
 def test_resume_from_saved_state_matches_single_run(synth, name):
     conf = BacktestConfig(start="2016-06-01")
     full = Simulator(synth, strategies.create(name), conf).run()

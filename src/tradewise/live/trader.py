@@ -40,6 +40,7 @@ from ..broker.kite import Broker, BrokerError, KiteClient
 from ..costs import CostModel
 from ..db import Database
 from ..market_time import IST, last_complete_session, now_ist
+from ..risk import market_scale
 from ..strategies.base import DayContext, PositionView
 
 log = logging.getLogger(__name__)
@@ -80,6 +81,7 @@ class LiveConfig(BaseModel):
     max_sector_weight: float = Field(0.30, gt=0, le=1)
     entry_buffer: float = Field(0.005, ge=0, le=0.03, description="Buy limit this much above the close")
     stop_buffer: float = Field(0.02, ge=0.005, le=0.05, description="Safety-exit sell limit this far below the trigger")
+    safety_switch: bool = Field(True, description="Buy smaller when the market is jumpy")
 
 
 @dataclass
@@ -522,6 +524,11 @@ class LiveTrader:
         sector_value: dict[str, float] = {}
         for s, p in held.items():
             sector_value[data.sector_of(s)] = sector_value.get(data.sector_of(s), 0) + p["qty"] * float(close.get(s, 0))
+        scale = 1.0
+        if cfg.safety_switch:
+            scale = float(market_scale(data.benchmark).iloc[-1])
+            if scale < 0.999:
+                notes.append(f"Safety switch: the market is jumpy, so new buys are {scale:.0%} of normal size.")
         out: list[PlannedOrder] = []
         for e in entries:
             if len(out) >= min(cfg.max_new_per_day, slots):
@@ -532,9 +539,9 @@ class LiveTrader:
             if e.stop is not None:
                 if limit <= e.stop:
                     continue
-                qty = math.floor(cfg.capital_limit * cfg.risk_per_trade / (limit - e.stop))
+                qty = math.floor(cfg.capital_limit * cfg.risk_per_trade * scale / (limit - e.stop))
             else:
-                qty = math.floor(cfg.capital_limit * float(e.weight) / limit)
+                qty = math.floor(cfg.capital_limit * float(e.weight) * scale / limit)
             qty = min(qty, math.floor(cfg.capital_limit * cfg.max_position_weight / limit))
             sec = data.sector_of(e.symbol)
             qty = min(qty, math.floor(max(0.0, cfg.capital_limit * cfg.max_sector_weight - sector_value.get(sec, 0)) / limit))

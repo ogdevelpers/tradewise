@@ -16,6 +16,7 @@ from .backtest.engine import BacktestConfig
 from .config import Settings
 from .data.market import MarketData
 from .data.store import PriceStore
+from . import risk
 
 log = logging.getLogger(__name__)
 
@@ -95,12 +96,23 @@ def market_context(data: MarketData) -> dict:
     }
 
 
-def position_preview(close: float, stop: float | None, weight: float | None, cfg: BacktestConfig) -> dict:
+def safety_status(data: MarketData, cfg: BacktestConfig) -> dict:
+    """Today's safety-switch size multiplier (market part), with a plain-language message."""
+    vol = risk.market_vol(data.benchmark).iloc[-1]
+    if not cfg.safety_switch:
+        return {**risk.describe(1.0, vol, cfg.target_volatility), "enabled": False,
+                "message": "The safety switch is off: buys are always full size."}
+    scale = risk.market_scale(data.benchmark, cfg.target_volatility, cfg.min_size_scale).iloc[-1]
+    return {**risk.describe(float(scale), vol, cfg.target_volatility), "enabled": True}
+
+
+def position_preview(close: float, stop: float | None, weight: float | None, cfg: BacktestConfig,
+                     scale: float = 1.0) -> dict:
     cap = cfg.initial_capital
     if stop is not None and close > stop:
-        qty = math.floor(cap * cfg.risk_per_trade / (close - stop))
+        qty = math.floor(cap * cfg.risk_per_trade * scale / (close - stop))
     elif weight is not None:
-        qty = math.floor(cap * weight / close)
+        qty = math.floor(cap * weight * scale / close)
     else:
         return {"qty": 0}
     qty = min(qty, math.floor(cap * cfg.max_position_weight / close))
@@ -116,6 +128,8 @@ def signals(svc: MarketService, strategy_name: str, params: Mapping[str, Any] | 
     feats = svc.features(strat)
     cfg = config or BacktestConfig()
     i = len(data.dates) - 1
+    safety = safety_status(data, cfg)
+    scale = safety["scale"]
     ctx = strategies.DayContext(i=i, date=data.dates[i], features=feats, positions={}, pending=frozenset(),
                                 can_enter=True)
     decision = strat.on_close(ctx)
@@ -127,7 +141,7 @@ def signals(svc: MarketService, strategy_name: str, params: Mapping[str, Any] | 
         out.append({
             "symbol": e.symbol, "sector": data.sector_of(e.symbol), "action": "BUY", "reason": e.reason,
             "score": _f(e.score), "close": _f(close), "stop": _f(e.stop), "target": _f(target),
-            **position_preview(close, e.stop, e.weight, cfg),
+            **position_preview(close, e.stop, e.weight, cfg, scale),
         })
     watch = []
     if not is_rebalance_strategy:
@@ -153,12 +167,12 @@ def signals(svc: MarketService, strategy_name: str, params: Mapping[str, Any] | 
             sym = data.symbols[j]
             close = data.close[sym].iloc[i]
             ranking.append({"rank": rank, "symbol": sym, "sector": data.sector_of(sym), "close": _f(close),
-                            **position_preview(close, None, weight, cfg)})
+                            **position_preview(close, None, weight, cfg, scale)})
     return {"date": data.dates[i].strftime("%Y-%m-%d"), "strategy": strat.name, "label": strat.label,
             "capital": cfg.initial_capital, "risk_per_trade": cfg.risk_per_trade,
             "market_rising": bool(feats.series["regime"][i] > 0),
             "rebalance_today": bool(feats.series.get("rebalance", np.zeros(i + 1))[i] > 0) if is_rebalance_strategy else None,
-            "next_rebalance": next_rebalance, "entries": out, "watch": watch[:20], "ranking": ranking}
+            "next_rebalance": next_rebalance, "safety": safety, "entries": out, "watch": watch[:20], "ranking": ranking}
 
 
 def stock_analysis(svc: MarketService, symbol: str, strategy_name: str = "trend_pullback",
@@ -202,8 +216,9 @@ def stock_analysis(svc: MarketService, symbol: str, strategy_name: str = "trend_
     if entry is not None:
         cfg = BacktestConfig()
         target = last + entry.target_r * (last - entry.stop) if entry.stop and entry.target_r else None
+        scale = safety_status(data, cfg)["scale"]
         signal.update({"score": _f(entry.score), "entry": _f(last), "stop": _f(entry.stop), "target": _f(target),
-                       **position_preview(last, entry.stop, entry.weight, cfg)})
+                       "size_scale": scale, **position_preview(last, entry.stop, entry.weight, cfg, scale)})
     prev = c.iloc[-2] if len(c) > 1 else last
     return {
         "symbol": symbol, "sector": data.sector_of(symbol), "date": bars.index[-1].strftime("%Y-%m-%d"),

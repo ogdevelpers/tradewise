@@ -9,7 +9,7 @@ from tradewise.backtest.engine import Simulator
 from conftest import nan_equal
 
 
-@pytest.mark.parametrize("name", ["trend_pullback", "momentum_rotation"])
+@pytest.mark.parametrize("name", ["trend_pullback", "momentum_rotation", "low_volatility"])
 @pytest.mark.parametrize("cut", ["2017-03-15", "2019-08-01", "2021-12-31"])
 def test_no_lookahead(synth, name, cut):
     """Features on day t must be identical whether or not later data exists."""
@@ -23,7 +23,7 @@ def test_no_lookahead(synth, name, cut):
         assert nan_equal(arr, full.series[k][:n]), f"{name}.{k} changes when future data is added"
 
 
-@pytest.mark.parametrize("name", ["trend_pullback", "momentum_rotation"])
+@pytest.mark.parametrize("name", ["trend_pullback", "momentum_rotation", "low_volatility"])
 def test_decisions_identical_on_truncated_data(synth, name):
     conf = BacktestConfig(start="2016-06-01")
     full = Simulator(synth, strategies.create(name), conf).run()
@@ -71,7 +71,7 @@ def test_param_validation():
     with pytest.raises(KeyError):
         strategies.create("nope")
     names = {s["name"] for s in strategies.available()}
-    assert names == {"trend_pullback", "momentum_rotation"}
+    assert names == {"trend_pullback", "momentum_rotation", "low_volatility"}
 
 
 def test_compare_with_combined_and_split(synth):

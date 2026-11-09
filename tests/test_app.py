@@ -126,7 +126,7 @@ def test_api_end_to_end(env):
     assert code == 200 and meta["has_data"] and meta["is_demo"] and meta["symbols"] == 15
 
     code, strats = c.request("GET", "/api/strategies")
-    assert {x["name"] for x in strats} == {"trend_pullback", "momentum_rotation"}
+    assert {x["name"] for x in strats} == {"trend_pullback", "momentum_rotation", "low_volatility"}
     code, mk = c.request("GET", "/api/market")
     assert code == 200 and mk["regime"] in ("uptrend", "downtrend")
     for name in ("trend_pullback", "momentum_rotation"):

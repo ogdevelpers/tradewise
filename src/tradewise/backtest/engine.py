@@ -27,6 +27,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..costs import CostModel
 from ..data.market import MarketData, as_array
+from ..risk import drawdown_scale, market_scale
 from ..strategies.base import DayContext, Decision, Features, PositionView, Strategy
 
 log = logging.getLogger(__name__)
@@ -43,6 +44,10 @@ class BacktestConfig(BaseModel):
     max_position_weight: float = Field(0.20, gt=0, le=1)
     max_sector_weight: float = Field(0.25, gt=0, le=1)
     max_monthly_drawdown: float = Field(0.06, gt=0, le=1, description="Pause new entries after this monthly loss")
+    safety_switch: bool = Field(True, description="Buy smaller when the market is jumpy or the account is in a deep dip")
+    target_volatility: float = Field(0.16, gt=0.02, le=1, description="Market swing above which buys shrink")
+    min_size_scale: float = Field(0.25, gt=0, le=1, description="Smallest buy size the safety switch allows")
+    drawdown_brake: float = Field(0.12, ge=0, le=1, description="Half-size buys while the account is this far below its peak (0 = off)")
     slippage: float = Field(0.001, ge=0, le=0.05)
     min_order_value: float = Field(1_000, ge=0)
     costs: CostModel = Field(default_factory=CostModel)
@@ -151,6 +156,7 @@ class SimState:
     paused_month: str = ""
     total_costs: float = 0.0
     last_decision_date: str = ""
+    peak_equity: float = 0.0
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -182,6 +188,11 @@ class Simulator:
         self.o, self.h = as_array(data.open), as_array(data.high)
         self.l, self.c = as_array(data.low), as_array(data.close)
         self.max_positions = self.cfg.max_positions or strategy.max_positions
+        if self.cfg.safety_switch:
+            scale = market_scale(data.benchmark, self.cfg.target_volatility, self.cfg.min_size_scale)
+            self.market_scale = scale.reindex(data.dates).fillna(1.0).to_numpy(dtype="float64")
+        else:
+            self.market_scale = np.ones(len(data.dates))
         self.state = state or SimState(cash=float(self.cfg.initial_capital))
         if state is None:
             self.state.next_index = self._first_index()
@@ -275,10 +286,10 @@ class Simulator:
             if risk_ps <= 0:
                 log.debug("%s %s: opened below stop, entry skipped", self._ds(date), o.symbol)
                 return
-            qty = math.floor(equity * cfg.risk_per_trade / risk_ps)
+            qty = math.floor(equity * cfg.risk_per_trade * self.size_scale(i, equity) / risk_ps)
         else:
-            qty = math.floor(equity * float(o.weight) / fill)
-        qty = min(qty, math.floor(equity * cfg.max_position_weight / fill))
+            qty = math.floor(equity * float(o.weight) * self.size_scale(i, equity) / fill)
+        qty = min(qty,math.floor(equity * cfg.max_position_weight / fill))
         sector = self.data.sector_of(o.symbol)
         room = equity * cfg.max_sector_weight - self._sector_value(sector, i)
         qty = min(qty, math.floor(max(room, 0.0) / fill))
@@ -299,6 +310,13 @@ class Simulator:
             breakeven_after_target=o.breakeven_after_target, last_price=fill, costs=cost, reason=o.reason,
         )
         self._record_fill(date, o.symbol, "buy", qty, fill, cost, o.reason)
+
+    def size_scale(self, i: int, equity: float) -> float:
+        """Safety-switch multiplier for a buy filled at day ``i``'s open, from closes up to ``i - 1``."""
+        if not self.cfg.safety_switch:
+            return 1.0
+        market = float(self.market_scale[i - 1]) if i > 0 else 1.0
+        return market * drawdown_scale(equity, self.state.peak_equity, self.cfg.drawdown_brake)
 
     def _sell(self, pos: Position, qty: int, fill: float, i: int, date: pd.Timestamp, reason: str) -> None:
         st = self.state
@@ -356,6 +374,7 @@ class Simulator:
                 pos.last_price = px
             invested += pos.qty * pos.last_price
         equity = st.cash + invested
+        st.peak_equity = max(st.peak_equity, equity)
         st.equity.append((self._ds(self.dates[i]), round(equity, 2), round(st.cash, 2)))
         return equity
 
