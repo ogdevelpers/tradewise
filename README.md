@@ -60,7 +60,7 @@ pip install -e ".[yahoo,dev]"
 tradewise start            # background app + start at login + opens browser (--foreground, --demo)
 tradewise status           # is it running, how fresh are the prices
 tradewise stop
-pytest                     # 105 tests, about 20 seconds (set TRADEWISE_TEST_PG_URL to also test Postgres)
+pytest                     # 109 tests, about 20 seconds (set TRADEWISE_TEST_PG_URL to also test Postgres)
 ```
 
 Other commands: `tradewise data`, `tradewise backtest`, `tradewise signals`, `tradewise paper ...`, `tradewise serve`.
