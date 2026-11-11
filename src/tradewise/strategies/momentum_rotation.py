@@ -16,6 +16,7 @@ class MomentumRotationParams(StrategyParams):
     exit_rank: int = Field(30, ge=3, le=200, description="Sell a holding only when it falls below this rank")
     lookback_long: int = Field(252, ge=60, le=504)
     lookback_short: int = Field(126, ge=20, le=252)
+    start_immediately: bool = Field(True, description="With nothing held yet, buy at the next close instead of waiting for the month to turn")
     skip_recent: int = Field(21, ge=0, le=63, description="Ignore the latest days (short-term reversal)")
     vol_period: int = Field(252, ge=60, le=504)
     min_turnover_cr: float = Field(5.0, ge=0)
@@ -77,7 +78,8 @@ class MomentumRotation(Strategy):
     def on_close(self, ctx: DayContext) -> Decision:
         f, i, p = ctx.features, ctx.i, self.params
         out = Decision()
-        if f.series["rebalance"][i] <= 0:
+        starting = getattr(p, "start_immediately", False) and not ctx.positions and not ctx.pending
+        if f.series["rebalance"][i] <= 0 and not starting:
             return out
         regime_on = f.series["regime"][i] > 0
         score = f.row("score", i)

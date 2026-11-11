@@ -50,7 +50,7 @@ def test_trend_pullback_rules(synth):
 
 
 def test_momentum_trades_only_after_month_start(synth):
-    s = strategies.create("momentum_rotation", {"top_n": 4, "exit_rank": 6})
+    s = strategies.create("momentum_rotation", {"top_n": 4, "exit_rank": 6, "start_immediately": False})
     st = Simulator(synth, s, BacktestConfig(start="2016-06-01")).run()
     assert st.fills
     dates = synth.dates
@@ -59,6 +59,18 @@ def test_momentum_trades_only_after_month_start(synth):
     allowed = {dates[dates.get_loc(d) + 1] for d in first_of_month if dates.get_loc(d) + 1 < len(dates)}
     assert fill_days <= allowed
     assert max(len(p) for p in [st.positions]) <= 4
+
+
+@pytest.mark.parametrize("name", ["momentum_rotation", "low_volatility"])
+def test_monthly_plans_start_without_waiting_for_the_month(synth, name):
+    """A new account mid-month buys at the next open instead of sitting in cash for weeks."""
+    params = {"top_n": 4, "exit_rank": 6, "regime_ma": 0, "min_turnover_cr": 0}
+    st = Simulator(synth, strategies.create(name, params), BacktestConfig(start="2017-06-14")).run()
+    first = pd.Timestamp(st.fills[0].date)
+    assert first == synth.dates[synth.dates.get_loc(pd.Timestamp("2017-06-14")) + 1]
+    late = Simulator(synth, strategies.create(name, {**params, "start_immediately": False}),
+                     BacktestConfig(start="2017-06-14")).run()
+    assert pd.Timestamp(late.fills[0].date).month == 7
 
 
 def test_param_validation():

@@ -29,6 +29,7 @@ class LowVolatilityParams(StrategyParams):
     trend_ma: int = Field(200, ge=0, le=400, description="Stock must be above this SMA (0 = off)")
     regime_ma: int = Field(200, ge=0, le=400, description="No new buys while benchmark is below this SMA (0 = off)")
     exit_all_in_bear: bool = Field(False, description="Sell everything when the regime filter turns off")
+    start_immediately: bool = Field(True, description="With nothing held yet, buy at the next close instead of waiting for the month to turn")
     skip_recent: int = Field(0, ge=0, le=63)
 
     @model_validator(mode="after")
